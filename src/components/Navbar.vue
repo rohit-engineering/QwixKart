@@ -92,6 +92,12 @@
   >
     <i :class="iconClass(item)"></i>
     <span class="quick-label">{{ item.label }}</span>
+    <span
+      v-if="getBadgeCount(item.to) > 0"
+      class="quick-badge"
+    >
+      {{ getBadgeCount(item.to) }}
+    </span>
   </button>
 </div>
   </div>
@@ -100,9 +106,13 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { useCart } from '../composables/useCart'
+import { useOrders } from '../composables/useOrders'
 
 const router = useRouter()
 const route = useRoute()
+const { cart } = useCart()
+const { orders } = useOrders()
 
 const isScrolled = ref(false)
 
@@ -181,7 +191,7 @@ const currentRoute = computed(() => route.path)
 
 // cart page par quickbar hide
 const showMobileQuickbar = computed(() => {
-  return currentRoute.value !== '/cart' && currentRoute.value !== '/checkout' && currentRoute.value !== '/order-confirmation' && currentRoute.value !== '/verify-upi' && currentRoute.value !== '/upi-payment' && showQuickbar.value
+  return currentRoute.value !== '/cart' && currentRoute.value !== '/checkout' && currentRoute.value !== '/order-confirmation' && currentRoute.value !== '/verify-upi' && currentRoute.value !== '/upi-payment' && currentRoute.value !== '/shop' && showQuickbar.value
 })
 // 🔍 global search term
 const searchTerm = ref('')
@@ -196,8 +206,18 @@ const handleSearch = () => {
   })
 }
 
-// TODO: connect with real store later
-const cartCount = ref(0)
+// 🛒 Real-time cart count from useCart composable
+const cartCount = computed(() => cart.value?.length ?? 0)
+
+// 📦 Real-time orders count from useOrders composable
+const ordersCount = computed(() => orders.value?.length ?? 0)
+
+// 🔢 Helper to get badge count for quickbar items
+const getBadgeCount = (path) => {
+  if (path === '/cart') return cartCount.value
+  if (path === '/orders') return ordersCount.value
+  return 0
+}
 
 const navLinks = [
   { to: '/', title: 'Home' },
@@ -450,6 +470,7 @@ $text-muted: #6b7280;
   color: $text-muted;
   cursor: pointer;
   border-radius: 999px;
+  position: relative;
 
   i {
     font-size: 1.3rem;
@@ -466,8 +487,19 @@ $text-muted: #6b7280;
   }
 }
 
-.quick-label {
-  font-size: 0.7rem;
+.quick-badge {
+  position: absolute;
+  top: -4px;
+  right: 0;
+  background: $primary;
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 999px;
+  min-width: 16px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(205, 2, 104, 0.3);
 }
 
 /* Avoid content hiding behind bottom bar */

@@ -82,18 +82,18 @@
     </transition>
 
     <!-- IG-LIKE FEED -->
-    <main v-show="!loading" ref="scroller" class="feed-scroller" @scroll.passive="(e) => { onScroll(e); tryLoadMore(e.target) }">
-      <article
-  v-for="(p, idx) in visibleProducts"
-  :key="p.id || idx"
-  class="post-card"
->
+    <main v-show="!loading" ref="scroller" class="feed-scroller">
+        <article
+          v-for="(p, idx) in visibleProducts"
+          :key="p.id || idx"
+          class="post-card"
+        >
         <!-- POST HEADER: show PRODUCT CATEGORY (fallbacks) -->
         <header class="post-header">
           <div class="post-user" @click="openProductFromProfile(p)">
   <img
     class="avatar"
-    :src="avatarFor(p)"
+    :src="p._avatar || avatarFor(p)"
     @error="onAvatarError($event, p)"
     alt="profile"
   />
@@ -135,10 +135,10 @@
             <picture class="post-media-inner" :aria-hidden="!localMap.get(p.id)">
             <source v-if="p.image_webp" :srcset="p.image_webp" type="image/webp" />
             <img
-              :src="p.image1 || p.image2 || p.image3 || defaultImage"
+              :src="p._imageSrc"
               :alt="p.title || 'product image'"
-              @load="() => onImageLoad(p.id)"
-              @error="() => onImageError(p)"
+              @load="onImageLoad(p.id)"
+              @error="onImageError(p)"
               class="post-img"
               :class="{ 'img-fade-in': localMap.get(p.id) }"
             />
@@ -188,7 +188,7 @@
         <div class="post-body">
           <div class="caption">
             <span class="username inline">
-              ₹{{ Number(p.price ?? p.finalPrice ?? 0).toFixed(2) }}
+              ₹{{ p._priceText }}
             </span>
             <span class="caption-text"> {{ p.caption || p.title || '' }} </span>
           </div>
@@ -201,6 +201,9 @@
           <div class="time small muted">{{ p.time || p.timeAgo || '' }}</div>
         </div>
       </article>
+
+      <!-- load-more sentinel for incremental rendering -->
+      <div ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" style="height:0; margin:0; padding:0; opacity:0; pointer-events:none; overflow:hidden;"></div>
 
       <div v-if="filteredProducts.length === 0" class="empty-note muted">No posts to show</div>
     </main>
@@ -403,7 +406,6 @@
     </div>
   </div>
 </transition>
-
 </template>
 
 <script setup>
@@ -432,8 +434,16 @@ const productsRaw = shallowRef([])
 watch(
   () => props.products,
   (list) => {
-    if (Array.isArray(list)) productsRaw.value = markRaw(list.slice())
-    else productsRaw.value = []
+    if (Array.isArray(list)) {
+      // Precompute small, cheap derived fields to avoid heavy template work
+      const mapped = list.map(p => {
+        p._imageSrc = p.image1 || p.image2 || p.image3 || defaultImage
+        p._priceText = Number(p.price ?? p.finalPrice ?? 0).toFixed(2)
+        p._cartUpdating = p._cartUpdating || false
+        return p
+      })
+      productsRaw.value = markRaw(mapped.slice())
+    } else productsRaw.value = []
   },
   { immediate: true }
 )
@@ -477,47 +487,12 @@ const loading = ref(true);
 
 /* searchResults is defined after filteredProducts to avoid circular refs */
 
-const scroller = ref(null)
-
-// Throttled scroll handler using requestAnimationFrame
-let ticking = false
-let lastScrollTop = 0
-
-function onScroll(e) {
-  const st = e.target.scrollTop
-
-  if (!ticking) {
-    window.requestAnimationFrame(() => {
-      const diff = st - lastScrollTop
-
-      // 👇 increase threshold (very important)
-      if (Math.abs(diff) > 12) {
-        const direction = diff > 0 ? 'down' : 'up'
-        window.dispatchEvent(
-          new CustomEvent('shop-scroll', { detail: direction })
-        )
-        lastScrollTop = st < 0 ? 0 : st
-      }
-
-      ticking = false
-    })
-    ticking = true
-  }
-}
+const scroller = ref(null);
 
 
 // Infinite-style incremental rendering: load posts in batches on scroll
 const batchSize = 8
 const displayedCount = ref(batchSize)
-
-function tryLoadMore(el) {
-  try {
-    const remaining = el.scrollHeight - (el.scrollTop + el.clientHeight)
-    if (remaining < 800 && displayedCount.value < filteredProducts.value.length) {
-      displayedCount.value = Math.min(filteredProducts.value.length, displayedCount.value + batchSize)
-    }
-  } catch (e) {}
-}
 
 
 /* ----------------------
@@ -848,11 +823,18 @@ watch(
             fetchCountsForProducts(ids),
             fetchLikesCountForProducts(ids)
           ]);
-          
-          // Apply both counts to each product
+
+          // Apply both counts to each product and set cached avatar (cheap string)
           list.forEach(p => {
             p.comments_count = commentCounts[String(p.id)] ?? p.comments_count ?? 0;
             p.likes_count = likeCounts[String(p.id)] ?? p.likes_count ?? 0;
+            try {
+              // compute once and cache so template doesn't call avatarFor repeatedly
+              p._avatar = avatarFor(p)
+            } catch (e) {}
+            // ensure image and price fields exist in case prop watcher didn't run first
+            p._imageSrc = p._imageSrc || p.image1 || p.image2 || p.image3 || defaultImage
+            p._priceText = p._priceText || Number(p.price ?? p.finalPrice ?? 0).toFixed(2)
           });
         }
       }
@@ -891,6 +873,21 @@ const filters = reactive({
   sort: 'default',       // default | price_low | price_high
   shuffle: false
 });
+
+/* Reset incremental display when filters change */
+watch(
+  () => [filters.category, filters.sort, filters.shuffle],
+  () => {
+    displayedCount.value = batchSize
+    lastLoadTime = 0
+    // Re-observe sentinel if it was unobserved
+    if (loadMoreSentinel.value && loadMoreIO && displayedCount.value < filteredProducts.value.length) {
+      try {
+        loadMoreIO.observe(loadMoreSentinel.value)
+      } catch (e) {}
+    }
+  }
+)
 
 /* REAL CATEGORIES FROM DB */
 const categories = ref([]);
@@ -985,6 +982,50 @@ function addCartFromMenu() {
 }
 
 
+const loadMoreSentinel = ref(null)
+let loadMoreIO = null
+let lastLoadTime = 0
+
+onMounted(() => {
+  loadMoreIO = new IntersectionObserver(
+    (entries) => {
+      if (!entries[0].isIntersecting) return
+
+      // Debounce: prevent rapid-fire callbacks
+      const now = Date.now()
+      if (now - lastLoadTime < 300) return
+      lastLoadTime = now
+
+      // Stop observing if all products are already loaded
+      if (displayedCount.value >= filteredProducts.value.length) {
+        if (loadMoreSentinel.value && loadMoreIO) {
+          loadMoreIO.unobserve(loadMoreSentinel.value)
+        }
+        return
+      }
+
+      displayedCount.value = Math.min(
+        filteredProducts.value.length,
+        displayedCount.value + batchSize
+      )
+    },
+    {
+      root: scroller.value,
+      rootMargin: '600px',
+    }
+  )
+
+  if (loadMoreSentinel.value) {
+    loadMoreIO.observe(loadMoreSentinel.value)
+  }
+})
+
+onUnmounted(() => {
+  if (loadMoreIO) {
+    loadMoreIO.disconnect()
+    loadMoreIO = null
+  }
+})
 
 </script>
 
@@ -1084,13 +1125,16 @@ function addCartFromMenu() {
 
 /* feed scroller */
 .feed-scroller {
+  flex: 1;
   overflow-y: auto;
-  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; /* iOS smooth */
+  overscroll-behavior-y: auto;
   touch-action: pan-y;
 }
 
 /* POST CARD — pastel aesthetic */
 .post-card {
+  contain: paint;
   max-width: 760px;
   margin: 14px auto;
   border-radius: 18px;
@@ -1099,6 +1143,12 @@ function addCartFromMenu() {
   background: #e8f9f3;
   box-shadow: 0 12px 34px rgba(18, 27, 36, 0.06);
   border: 1px solid rgba(19, 27, 36, 0.04);
+}
+
+/* Force compositing for smoother scroll rendering */
+.post-card {
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 /* header */
@@ -1154,6 +1204,7 @@ function addCartFromMenu() {
 
 /* image holder: white rounded holder with padding & subtle shadow */
 .post-media {
+  aspect-ratio: 1 / 1;
   position: relative;
   width: calc(100% - 32px);
   margin: 6px auto;
@@ -1213,13 +1264,17 @@ function addCartFromMenu() {
 /* image fade-in */
 .post-img {
   width: 100%;
-  height: auto;
+  height: 100%;
   max-height: 50vh;
   object-fit: contain;
   border-radius: 10px;
   display: block;
   opacity: 0;
   transition: opacity 360ms cubic-bezier(.2,.9,.2,1);
+}
+.post-img {
+  will-change: opacity, transform;
+  backface-visibility: hidden;
 }
 .post-img.img-fade-in { opacity: 1; }
 
