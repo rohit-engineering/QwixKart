@@ -486,12 +486,22 @@ let lastScrollTop = 0
 function onScroll(e) {
   const st = e.target.scrollTop
 
-  if (Math.abs(st - lastScrollTop) > 6) {
-    const direction = st > lastScrollTop ? 'down' : 'up'
-    window.dispatchEvent(
-      new CustomEvent('shop-scroll', { detail: direction })
-    )
-    lastScrollTop = st <= 0 ? 0 : st
+  if (!ticking) {
+    window.requestAnimationFrame(() => {
+      const diff = st - lastScrollTop
+
+      // 👇 increase threshold (very important)
+      if (Math.abs(diff) > 12) {
+        const direction = diff > 0 ? 'down' : 'up'
+        window.dispatchEvent(
+          new CustomEvent('shop-scroll', { detail: direction })
+        )
+        lastScrollTop = st < 0 ? 0 : st
+      }
+
+      ticking = false
+    })
+    ticking = true
   }
 }
 
@@ -992,8 +1002,6 @@ function addCartFromMenu() {
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
 }
 .ig-topbar {
-  position: sticky;
-  top: 0;
   z-index: 1200;
   display: flex;
   align-items: center;
@@ -1003,6 +1011,19 @@ function addCartFromMenu() {
   background: transparent;
   border-bottom: 1px solid rgba(0,0,0,0.06);
 }
+@media (max-width: 768px) {
+  .ig-topbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+
+  .feed-scroller {
+    padding-top: 56px; /* topbar height */
+  }
+}
+
 .brand {
   font-weight: 800;
   font-size: 1rem;
@@ -1064,9 +1085,8 @@ function addCartFromMenu() {
 /* feed scroller */
 .feed-scroller {
   overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
-  flex: 1;
-  padding: 12px 12px calc(env(safe-area-inset-bottom, 12px) + 20px);
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 /* POST CARD — pastel aesthetic */
