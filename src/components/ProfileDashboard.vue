@@ -32,7 +32,7 @@
       <div class="activity-chart-mini">
         <apexchart
           type="line"
-          height="160"
+          :height="160"
           :options="activityLineOptions"
           :series="activityLineSeries"
         />
@@ -93,7 +93,7 @@
       <div class="dash-activity-chart">
         <apexchart
           type="area"
-          height="170"
+          :height="170"
           :options="viewsAreaOptions"
           :series="viewsAreaSeries"
         />
@@ -263,15 +263,22 @@ const viewsAreaOptions = {
   }
 }
 
-/* ---------- Visits: local counter per user ---------- */
+/* ---------- Visits: local counter per session ---------- */
 
 const trackVisit = () => {
   if (!user.value) return
-  const key = `genz_profile_visits_${user.value.id}`
-  const current = Number(localStorage.getItem(key) || '0') || 0
-  const next = current + 1
-  localStorage.setItem(key, String(next))
-  visitCount.value = next
+  // Only track once per session (using a sessionStorage flag)
+  const sessionKey = `genz_profile_visited_${user.value.id}`
+  const hasTrackedThisSession = sessionStorage.getItem(sessionKey)
+  
+  if (!hasTrackedThisSession) {
+    const storageKey = `genz_profile_visits_${user.value.id}`
+    const current = Number(localStorage.getItem(storageKey) || '0') || 0
+    const next = current + 1
+    localStorage.setItem(storageKey, String(next))
+    sessionStorage.setItem(sessionKey, 'true')
+    visitCount.value = next
+  }
 }
 
 const loadVisitCount = () => {
@@ -297,25 +304,31 @@ const loadDashboardStats = async () => {
     const { data: orders, error: ordersError } = await supabase
       .from(TABLE_ORDERS)
       .select('id, status')
-      .eq(USER_COLUMN, userId)
+      .eq('user_id', userId)
 
-    if (ordersError) console.error('[dashboard] ordersError', ordersError)
+    if (ordersError) {
+      console.error('[dashboard] ordersError', ordersError)
+    }
 
     const { data: delivered, error: deliveredError } = await supabase
       .from(TABLE_ORDERS)
       .select('id')
-      .eq(USER_COLUMN, userId)
+      .eq('user_id', userId)
       .eq('status', 'delivered')
 
-    if (deliveredError) console.error('[dashboard] deliveredError', deliveredError)
+    if (deliveredError) {
+      console.error('[dashboard] deliveredError', deliveredError)
+    }
 
     // Cart
     const { data: cartItems, error: cartError } = await supabase
       .from(TABLE_CART)
       .select('id')
-      .eq(USER_COLUMN, userId)
+      .eq('user_id', userId)
 
-    if (cartError) console.error('[dashboard] cartError', cartError)
+    if (cartError) {
+      console.error('[dashboard] cartError', cartError)
+    }
 
     dashboard.value = {
       totalOrders: orders?.length || 0,
@@ -346,9 +359,12 @@ const setupRealtime = (userId) => {
         event: '*',
         schema: 'public',
         table: TABLE_ORDERS,
-        filter: `${USER_COLUMN}=eq.${userId}`
+        filter: `user_id=eq.${userId}`
       },
-      () => loadDashboardStats()
+      (payload) => {
+        console.log('[realtime] orders change:', payload)
+        loadDashboardStats()
+      }
     )
     .on(
       'postgres_changes',
@@ -356,11 +372,16 @@ const setupRealtime = (userId) => {
         event: '*',
         schema: 'public',
         table: TABLE_CART,
-        filter: `${USER_COLUMN}=eq.${userId}`
+        filter: `user_id=eq.${userId}`
       },
-      () => loadDashboardStats()
+      (payload) => {
+        console.log('[realtime] cart change:', payload)
+        loadDashboardStats()
+      }
     )
-    .subscribe()
+    .subscribe((status) => {
+      console.log('[realtime] subscription status:', status)
+    })
 }
 
 const cleanupRealtime = async () => {
@@ -378,6 +399,7 @@ onMounted(() => {
     loadDashboardStats()
     loadVisitCount()
     trackVisit()
+    setupRealtime(userId)
   }
 })
 
@@ -385,20 +407,20 @@ watch(
   () => user.value?.id,
   (newId, oldId) => {
     if (newId && newId !== oldId) {
-      cleanupRealtime()      // ✅ safety
+      console.log('[dashboard] user changed, resetting...')
+      cleanupRealtime()      // ✅ cleanup old
       loadDashboardStats()
       loadVisitCount()
       trackVisit()
-      setupRealtime(newId)   // ✅ ONLY place realtime starts
+      setupRealtime(newId)   // ✅ setup new
     }
 
     if (!newId) {
+      console.log('[dashboard] user logged out')
       cleanupRealtime()
     }
-  },
-  { immediate: true }
+  }
 )
-
 
 onBeforeUnmount(() => {
   cleanupRealtime()
