@@ -2,7 +2,10 @@
   "version": 2,
 
   "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+    {
+      "source": "/((?!assets|favicon.ico|manifest.webmanifest|sw.js).*)",
+      "destination": "/index.html"
+    }
   ],
 
   "headers": [
