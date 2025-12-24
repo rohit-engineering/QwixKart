@@ -30,12 +30,13 @@
       </div>
 
       <div class="activity-chart-mini">
-        <apexchart
-          type="line"
-          :height="160"
-          :options="activityLineOptions"
-          :series="activityLineSeries"
-        />
+        <MiniLineCanvas
+    :data="[
+      visitCount,
+      exploredCount,
+      dashboard.totalOrders
+    ]"
+  />
       </div>
     </div>
 
@@ -85,26 +86,23 @@
     </div>
 
     <!-- mini area chart for views -->
-    <div class="dash-activity-card">
-      <div class="dash-activity-head">
-        <p class="activity-title">Product views by day</p>
-        <p class="activity-sub">Last 7 days</p>
-      </div>
-      <div class="dash-activity-chart">
-        <apexchart
-          type="area"
-          :height="170"
-          :options="viewsAreaOptions"
-          :series="viewsAreaSeries"
-        />
-      </div>
-    </div>
+    <div class="dash-activity-chart">
+  <MiniAreaCanvas
+    :data="
+      dashboard.visitsByDay.length
+        ? dashboard.visitsByDay.map(v => v.count)
+        : [15, 25, 18, 40, 32, 50, 28]
+    "
+  />
+</div>
   </section>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useAuth, supabase } from '../composables/useSupabase'
+import MiniLineCanvas from '../components/charts/MiniLineCanvas.vue'
+import MiniAreaCanvas from '../components/charts/MiniAreaCanvas.vue'
 
 const { user, profile } = useAuth()
 

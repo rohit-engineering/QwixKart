@@ -60,9 +60,9 @@ const routes = [
   props: true
 },
 
-  { path: '/cart', component: Cart },
-  { path: '/orders', component: Orders },
-  { path: '/checkout', component: Checkout },
+ { path: '/cart', name: 'cart', component: Cart },
+ { path: '/orders', name: 'orders', component: Orders },
+ { path: '/checkout', name: 'checkout', component: Checkout },
 
   {
     path: '/upi-payment',
@@ -117,6 +117,14 @@ const router = createRouter({
 
 /* ================= NAVIGATION GUARDS ================= */
 router.beforeEach((to, from, next) => {
+  const isReload =
+  !from.name &&
+  performance.getEntriesByType('navigation')[0]?.type === 'reload'
+
+if (isReload) {
+  return next()
+}
+
   const { user } = useAuth()
   if (to.name === '404') {
   return next()

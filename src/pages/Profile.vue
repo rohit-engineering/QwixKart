@@ -9,7 +9,7 @@
         </span>
 
         <!-- 🔁 Top-right neon logout pill (Bootstrap icon) -->
-        <button class="icon-button" type="button" @click="handleLogout">
+        <button ref="logoutBtn" class="icon-button"  type="button"  @click="handleLogout">
           <i class="bi bi-box-arrow-right"></i>
         </button>
       </header>
@@ -130,7 +130,7 @@ import { useRouter } from 'vue-router'
 import { useAuth, supabase } from '../composables/useSupabase'
 import { useToast } from 'vue-toastification'
 import ProfileDashboard from '../components/ProfileDashboard.vue'
-
+const logoutBtn = ref(null)
 // ----------------- Username helpers -----------------
 const boySuffixes = ['_op', '_x', '_007', '_flex', '_king', '_rx']
 const girlSuffixes = ['_xo', '_angel', '_bloom', '_daisy', '_glow', '_doll']
@@ -156,18 +156,29 @@ const generateCandidate = (base, suffixes, index) => {
 
 const generateUniqueUsername = async (base, gender) => {
   const suffixes = pickSuffixes(gender)
+
   for (let i = 0; i < 12; i++) {
     const candidate = generateCandidate(base, suffixes, i)
-    const { data } = await supabase
-      .from('public_profiles')
-    .select('id, username, avatar_url, city')
-    .eq('id', String(newRow.user_id))
-    .maybeSingle()
 
-    if (!data) return candidate
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', candidate)
+      .limit(1)
+
+    if (error) {
+      console.warn('Username check failed:', error.message)
+      return `${base}_${Math.floor(Math.random() * 9999)}`
+    }
+
+    if (!data || data.length === 0) {
+      return candidate
+    }
   }
+
   return `${base}_${Math.floor(Math.random() * 9999)}`
 }
+
 
 // ----------------- DiceBear style helpers -----------------
 
@@ -339,50 +350,53 @@ export default {
     }
 
     const initProfileVisuals = async () => {
-      if (!user.value || !profile.value || visualsInitialized.value) return
+  try {
+    if (!user.value || !profile.value || visualsInitialized.value) return
 
-      loadExistingUsername()
+    loadExistingUsername()
 
-      let updatedUsername = username.value
-      let updatedAvatar = ''
+    let updatedUsername = username.value
+    let updatedAvatar = ''
 
-      // username
-      if (!updatedUsername) {
-        const base = normalizeBase(profile.value.full_name, user.value.email)
-        updatedUsername = await generateUniqueUsername(base, gender.value)
-        username.value = updatedUsername
-      }
-
-      // choose style for this user
-      const style = pickStyleForUser(
-        gender.value,
-        updatedUsername || user.value.id
-      )
-      const seed = avatarSeed.value
-
-      // main DiceBear URL
-      updatedAvatar = buildDiceBearAvatarUrl(style, seed, gender.value)
-      avatarUrl.value = updatedAvatar
-
-      // save new username + avatar
-      try {
-        await supabase
-          .from('profiles')
-          .update({
-            username: updatedUsername,
-            avatar_url: updatedAvatar
-          })
-          .eq('id', user.value.id)
-      } catch (err) {
-        console.warn('Failed to save username/avatar in profiles:', err?.message)
-      }
-
-      visualsInitialized.value = true
+    if (!updatedUsername) {
+      const base = normalizeBase(profile.value.full_name, user.value.email)
+      updatedUsername = await generateUniqueUsername(base, gender.value)
+      username.value = updatedUsername
     }
+
+    const style = pickStyleForUser(
+      gender.value,
+      updatedUsername || user.value.id
+    )
+
+    const seed = avatarSeed.value
+    updatedAvatar = buildDiceBearAvatarUrl(style, seed, gender.value)
+    avatarUrl.value = updatedAvatar
+
+    await supabase
+      .from('profiles')
+      .update({
+        username: updatedUsername,
+        avatar_url: updatedAvatar
+      })
+      .eq('id', user.value.id)
+
+    visualsInitialized.value = true
+  } catch (err) {
+    console.error('Profile visuals failed:', err)
+    visualsInitialized.value = true // 🚨 allow UI to render anyway
+  }
+}
 
     onMounted(() => {
       if (!user.value) return
       initProfileVisuals()
+
+      if (logoutBtn.value) {
+    logoutBtn.value.addEventListener('click', () => {
+      console.log('clicked')
+    })
+  }
     })
 
     watch(profile, () => {

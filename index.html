@@ -124,49 +124,6 @@ window.addEventListener('beforeunload', () => {
 </script>
 <script>
 (function () {
-  const container = document.getElementById("scrollContainer");
-
-  let startY = 0;
-  let currentY = 0;
-  let isTouching = false;
-  let velocity = 0;
-  let rafId = null;
-
-  container.addEventListener("touchstart", e => {
-    isTouching = true;
-    startY = e.touches[0].clientY;
-    velocity = 0;
-    cancelAnimationFrame(rafId);
-  }, { passive: true });
-
-  container.addEventListener("touchmove", e => {
-    if (!isTouching) return;
-
-    const y = e.touches[0].clientY;
-    const delta = startY - y;
-
-    container.scrollTop += delta;
-    velocity = delta;
-
-    startY = y;
-  }, { passive: true });
-
-  container.addEventListener("touchend", () => {
-    isTouching = false;
-    momentumScroll();
-  });
-
-  function momentumScroll() {
-    velocity *= 0.95; // friction
-    if (Math.abs(velocity) < 0.5) return;
-
-    container.scrollTop += velocity;
-    rafId = requestAnimationFrame(momentumScroll);
-  }
-})();
-</script>
-<script>
-(function () {
   let startY = 0;
 
   window.addEventListener(

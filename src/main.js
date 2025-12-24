@@ -4,7 +4,6 @@ import App from './App.vue'
 import router from './router'
 
 import 'bootstrap/dist/css/bootstrap.min.css'
-import 'bootstrap'
 import './styles/main.scss'
 import 'bootstrap-icons/font/bootstrap-icons.css'
 
@@ -14,8 +13,6 @@ import 'vue-toastification/dist/index.css'
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import './assets/main.css'
 
-import VueApexCharts from 'vue3-apexcharts'
-import { initAnonymousAuth } from './composables/useFirebaseAuth'
 
 /* =========================================================
    🔥 DEV MODE: HARD KILL SW + CACHE (SAFE)
@@ -73,7 +70,6 @@ app.use(Toast, {
   toastClassName: 'genz-toast'
 })
 
-app.use(VueApexCharts)
 app.use(VueQueryPlugin)
 
 app.mount('#app')
