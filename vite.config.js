@@ -40,29 +40,26 @@ export default defineConfig(({ mode }) => {
         },
 
         workbox: {
-          cleanupOutdatedCaches: true,
-          skipWaiting: true,
-          clientsClaim: true,
-          navigateFallback: '/index.html',
+  cleanupOutdatedCaches: true,
+  skipWaiting: true,
+  clientsClaim: true,
 
-          runtimeCaching: [
-            {
-              urlPattern: ({ request }) => request.mode === 'navigate',
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'html-cache',
-                networkTimeoutSeconds: 2
-              }
-            },
-            {
-              urlPattern: /\.(js|css)$/i,
-              handler: 'StaleWhileRevalidate',
-              options: {
-                cacheName: 'assets-cache'
-              }
-            }
-          ]
-        }
+  navigateFallback: '/index.html',
+
+  runtimeCaching: [
+    {
+      urlPattern: ({ request }) => request.mode === 'navigate',
+      handler: 'NetworkOnly'
+    },
+    {
+      urlPattern: /\.(js|css|woff2|png|jpg|svg)$/i,
+      handler: 'StaleWhileRevalidate',
+      options: {
+        cacheName: 'assets-cache'
+      }
+    }
+  ]
+}
       }),
 
       visualizer({

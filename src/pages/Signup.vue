@@ -438,18 +438,17 @@ export default {
   validatePassword()
 
   if (
-    nameError.value ||
-    phoneError.value ||
-    genderError.value ||
-    cityError.value ||
-    !emailValid.value ||
-    passwordStrength.value === 'weak'
-  ) {
-    formInvalid.value = true
-    toast.error('Please fix highlighted fields before continuing.')
-    setTimeout(() => (formInvalid.value = false), 600)
-    return
-  }
+  nameError.value ||
+  phoneError.value ||
+  genderError.value ||
+  cityError.value ||
+  passwordStrength.value === 'weak'
+) {
+  formInvalid.value = true
+  toast.error('Please fix highlighted fields before continuing.')
+  setTimeout(() => (formInvalid.value = false), 600)
+  return
+}
 
   loading.value = true
   const normalizedEmail = email.value.trim().toLowerCase()
@@ -457,10 +456,10 @@ export default {
   try {
     // 🔁 Check if email already exists
     const { data: existingEmail, error: emailCheckError } = await supabase
-     .from('public_profiles')
-    .select('id, username, avatar_url, city')
-    .eq('id', String(newRow.user_id))
-    .maybeSingle()
+      .from('profiles')
+      .select('id')
+      .eq('email', normalizedEmail)
+      .maybeSingle()
 
     if (emailCheckError) {
       console.warn('Email uniqueness check error:', emailCheckError.message)
