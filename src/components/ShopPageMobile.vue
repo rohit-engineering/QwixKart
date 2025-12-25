@@ -84,10 +84,10 @@
     <!-- IG-LIKE FEED -->
     <main v-show="!loading" ref="scroller" class="feed-scroller">
         <article
-          v-for="(p, idx) in visibleProducts"
-          :key="p.id || idx"
-          class="post-card"
-        >
+  v-for="(p, idx) in visibleProducts"
+  :key="p.id"
+  class="post-card"
+>
         <!-- POST HEADER: show PRODUCT CATEGORY (fallbacks) -->
         <header class="post-header">
           <div class="post-user" @click="openProductFromProfile(p)">
@@ -203,7 +203,7 @@
       </article>
 
       <!-- load-more sentinel for incremental rendering -->
-      <div ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" style="height:0; margin:0; padding:0; opacity:0; pointer-events:none; overflow:hidden;"></div>
+      <div ref="loadMoreSentinel" class="load-more-sentinel" aria-hidden="true" style="height:1px; margin-bottom:80px;"></div>
 
       <div v-if="filteredProducts.length === 0" class="empty-note muted">No posts to show</div>
     </main>
@@ -745,7 +745,7 @@ function setupImageObserver() {
       }
       io.unobserve(img)
     })
-  }, { root: scroller.value || null, rootMargin: '300px' })
+  }, { root: null, rootMargin: '300px' })
 
   // observe current images
   nextTick(() => {
@@ -955,10 +955,12 @@ const filteredProducts = computed(() => {
 const productsToShow = computed(() => filteredProducts.value);
 
 // visibleProducts is the incremental slice shown to the user
+const windowSize = 6
+
 const visibleProducts = computed(() => {
-  return Array.isArray(filteredProducts.value)
-    ? filteredProducts.value.slice(0, displayedCount.value)
-    : []
+  const start = Math.max(0, displayedCount.value - windowSize)
+  const end = displayedCount.value + windowSize
+  return filteredProducts.value.slice(start, end)
 })
 
 /* search results */
@@ -997,12 +999,9 @@ onMounted(() => {
       lastLoadTime = now
 
       // Stop observing if all products are already loaded
-      if (displayedCount.value >= filteredProducts.value.length) {
-        if (loadMoreSentinel.value && loadMoreIO) {
-          loadMoreIO.unobserve(loadMoreSentinel.value)
-        }
-        return
-      }
+     if (displayedCount.value >= filteredProducts.value.length) {
+  return
+}
 
       displayedCount.value = Math.min(
         filteredProducts.value.length,
@@ -1010,7 +1009,7 @@ onMounted(() => {
       )
     },
     {
-      root: scroller.value,
+      root: null,
       rootMargin: '600px',
     }
   )
@@ -1027,16 +1026,86 @@ onUnmounted(() => {
   }
 })
 
+// Scroll handler to show/hide UI on scroll
+let lastScrollY = 0
+let ticking = false
+let snapTimeout = null
+
+function handleScroll() {
+  if (
+  searchOpen.value ||
+  menuOpen.value ||
+  filterOpen.value ||
+  shareModalOpen.value
+) {
+  return
+}
+  if (ticking) return
+
+  ticking = true
+  requestAnimationFrame(() => {
+    const currentY = window.scrollY
+
+    /* TOPBAR HIDE / SHOW */
+    if (currentY > lastScrollY + 8) {
+      uiVisible.value = false
+    } else if (currentY < lastScrollY - 8) {
+      uiVisible.value = true
+    }
+
+    lastScrollY = currentY
+    ticking = false
+  })
+
+  /* SNAP (debounced) */
+  clearTimeout(snapTimeout)
+  snapTimeout = setTimeout(snapToCard, 140)
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll, { passive: true })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
+})
+
+//heatmap scroll snapping
+let lastSnapY = 0
+
+function snapToCard() {
+  const delta = Math.abs(window.scrollY - lastSnapY)
+  if (delta > 80) return   // user still scrolling
+
+  lastSnapY = window.scrollY
+
+  if (!scroller.value) return
+  const cards = scroller.value.querySelectorAll('.post-card')
+
+  let closest = null
+  let min = Infinity
+
+  cards.forEach(card => {
+    const rect = card.getBoundingClientRect()
+    const dist = Math.abs(rect.top - 64)
+    if (dist < min) {
+      min = dist
+      closest = card
+    }
+  })
+
+  closest?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+
 </script>
 
 <style scoped>
-/* ---------- existing mobile styles (kept) ---------- */
 /* Root & topbar */
 .ig-root {
-  background: #f7faf8;
+  background:none;
   color: #111;
-  min-height: 100vh;
-  height: 100vh;
+  height: auto;
   display: flex;
   flex-direction: column;
   -webkit-font-smoothing: antialiased;
@@ -1051,7 +1120,11 @@ onUnmounted(() => {
   padding: 8px 14px;
   background: transparent;
   border-bottom: 1px solid rgba(0,0,0,0.06);
+  transition: transform 220ms ease, opacity 220ms ease;
 }
+.ig-topbar.hidden {
+  transform: translateY(-100%);
+  opacity: 0;}
 @media (max-width: 768px) {
   .ig-topbar {
     position: fixed;
@@ -1125,29 +1198,30 @@ onUnmounted(() => {
 
 /* feed scroller */
 .feed-scroller {
-  flex: 1;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch; /* iOS smooth */
-  overscroll-behavior-y: auto;
-  touch-action: pan-y;
+  overflow: visible;
+  -webkit-overflow-scrolling: auto;
 }
 
 /* POST CARD — pastel aesthetic */
 .post-card {
+   max-width: 760px;
+  margin: 0 auto 12px;
+  padding: 5px;
+  background: #ffffff;
+  border-radius: 10px;
+  box-shadow: none;
+  border-bottom: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03);
   contain: paint;
-  max-width: 760px;
-  margin: 14px auto;
-  border-radius: 18px;
   overflow: visible;
-  padding: 10px;
-  background: #e8f9f3;
-  box-shadow: 0 12px 34px rgba(18, 27, 36, 0.06);
   border: 1px solid rgba(19, 27, 36, 0.04);
+  content-visibility: auto;
+  contain-intrinsic-size: 600px;
+  will-change: transform;
 }
 
 /* Force compositing for smoother scroll rendering */
 .post-card {
-  will-change: transform;
   transform: translateZ(0);
 }
 
@@ -1156,9 +1230,9 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
   gap: 8px;
-  background: transparent;
+  padding: 10px 12px;
+  background: #fff;
 }
 .post-user {
   display: flex;
@@ -1204,24 +1278,22 @@ onUnmounted(() => {
 
 /* image holder: white rounded holder with padding & subtle shadow */
 .post-media {
-  aspect-ratio: 1 / 1;
-  position: relative;
-  width: calc(100% - 32px);
-  margin: 6px auto;
-  background: #ffffff;
-  border-radius: 14px;
+  width: 100%;
+  margin: 0;
   padding: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8px 22px rgba(18,27,36,0.06);
+  border-radius: 0;
+  background: #ffffff; /* insta uses black letterboxing */
+  box-shadow: none;
 }
 .post-media-inner {
-  width: 100%;
-  display: block;
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: 0;
 }
+.post-img {
+  border-radius: 0;
+  max-height: none;
+  filter: contrast(1.02) saturate(1.05);
+}
+
 
 /* --- per-image MODERN BLURRED GLASS CIRCLE LOADER --- */
 .glass-loader {
@@ -1303,7 +1375,8 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
+  padding: 6px 12px;
+  background: #fff;
 }
 .left-actions {
   display: flex;
@@ -1325,6 +1398,11 @@ onUnmounted(() => {
   justify-content: center;
   font-size: 1.15rem;
   color: #102027;
+  transition: transform .12s ease, opacity .12s ease;
+}
+.act:active {
+  transform: scale(0.88);
+  opacity: 0.7;
 }
 .act i { font-size: 1.28rem; }
 .act .liked, .act .bi-heart-fill.liked { color: #ff2d55; }
@@ -1344,9 +1422,16 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   gap: 8px;
+   box-shadow:
+    0 4px 12px rgba(0,160,107,0.25),
+    inset 0 1px 0 rgba(255,255,255,0.3);
 }
 .addcart-act-btn[aria-pressed="true"] { opacity: 0.95; }
 .addcart-act-btn:disabled { opacity: 0.85; cursor: default; }
+.addcart-act-btn:active {
+  transform: scale(0.97);
+}
+
 
 /* tiny spinner wrapper */
 .cart-spinner { display:inline-flex; align-items:center; justify-content:center; }
@@ -1354,11 +1439,11 @@ onUnmounted(() => {
 /* post body: reduced gap and compact */
 .post-body {
   padding: 10px 12px 12px;
-  background: rgba(255,255,255,0.9);
-  border-radius: 10px;
-  margin-top: 6px;
+  margin-top: 0;
+  border-radius: 0;
+  background: #fff;
+  box-shadow: none;
   color: #0f1720;
-  box-shadow: 0 6px 18px rgba(18,27,36,0.04);
 }
 .caption {
   display: flex;
@@ -1367,9 +1452,13 @@ onUnmounted(() => {
   align-items: baseline;
 }
 .caption .inline.username {
+    background: rgba(0,168,107,0.1);
+  color: #007a52;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.85rem;
   font-weight: 800;
   letter-spacing: -0.01em;
-  color: #0b2b27;
 }
 .caption-text {
   color: rgba(8,18,20,0.88);
@@ -1634,7 +1723,7 @@ onUnmounted(() => {
 
 /* product menu overrides (kept) */
 @media (min-width: 720px) {
-  .post-card { border-radius: 20px; margin-top: 12px; overflow: visible; }
+  .post-card { border-radius: 20px; margin-top: 12px; overflow: visible; max-width: 100%;}
   .ig-topbar { padding: 10px 18px; }
 }
 @media (max-width: 420px) {

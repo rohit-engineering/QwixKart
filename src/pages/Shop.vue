@@ -736,18 +736,13 @@ const handleComment = (payload) => {
 }
 
 /* 🔥 Fullscreen breakout for mobile Reel */
-/* Fullscreen fixed breakout (covers top/status bar + bottom gestures) */
 .reel-breakout {
-  position: fixed !important;
-  inset: 0;
-  width: 100vw !important;
-  height: 100dvh;
-  display: block;
-  margin: 0 !important;
-  padding: 0 !important;
-  box-sizing: border-box;
-  background: transparent;
-  z-index: 1100;
-  overscroll-behavior: contain;
+  position: relative !important;   /* 🔥 FIX */
+  inset: auto;
+  width: 100%;
+  min-height: 100dvh;
+  height: auto;
+  overflow: hidden;
 }
+
 </style>
