@@ -878,7 +878,10 @@ const filters = reactive({
 watch(
   () => [filters.category, filters.sort, filters.shuffle],
   () => {
-    displayedCount.value = batchSize
+    displayedCount.value = Math.max(
+  displayedCount.value,
+  batchSize
+)
     lastLoadTime = 0
     // Re-observe sentinel if it was unobserved
     if (loadMoreSentinel.value && loadMoreIO && displayedCount.value < filteredProducts.value.length) {
@@ -954,14 +957,12 @@ const filteredProducts = computed(() => {
 // exposed view list (alias for clarity)
 const productsToShow = computed(() => filteredProducts.value);
 
-// visibleProducts is the incremental slice shown to the user
-const windowSize = 6
-
 const visibleProducts = computed(() => {
-  const start = Math.max(0, displayedCount.value - windowSize)
-  const end = displayedCount.value + windowSize
-  return filteredProducts.value.slice(start, end)
+  return filteredProducts.value.slice(0, displayedCount.value)
 })
+
+
+
 
 /* search results */
 const searchResults = computed(() => {
@@ -989,30 +990,20 @@ let loadMoreIO = null
 let lastLoadTime = 0
 
 onMounted(() => {
-  loadMoreIO = new IntersectionObserver(
-    (entries) => {
-      if (!entries[0].isIntersecting) return
+loadMoreIO = new IntersectionObserver(
+  (entries) => {
+    if (!entries[0].isIntersecting) return
 
-      // Debounce: prevent rapid-fire callbacks
-      const now = Date.now()
-      if (now - lastLoadTime < 300) return
-      lastLoadTime = now
-
-      // Stop observing if all products are already loaded
-     if (displayedCount.value >= filteredProducts.value.length) {
-  return
-}
-
-      displayedCount.value = Math.min(
-        filteredProducts.value.length,
-        displayedCount.value + batchSize
-      )
-    },
-    {
-      root: null,
-      rootMargin: '600px',
+    if (displayedCount.value < filteredProducts.value.length) {
+      displayedCount.value += batchSize
     }
-  )
+  },
+  {
+    root: null,
+    rootMargin: '1000px',
+    threshold: 0
+  }
+)
 
   if (loadMoreSentinel.value) {
     loadMoreIO.observe(loadMoreSentinel.value)
@@ -1215,7 +1206,6 @@ function snapToCard() {
   contain: paint;
   overflow: visible;
   border: 1px solid rgba(19, 27, 36, 0.04);
-  content-visibility: auto;
   contain-intrinsic-size: 600px;
   will-change: transform;
 }
