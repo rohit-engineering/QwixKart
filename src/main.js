@@ -12,7 +12,7 @@ import 'vue-toastification/dist/index.css'
 
 import { VueQueryPlugin } from '@tanstack/vue-query'
 import './assets/main.css'
-
+import VueKonva from 'vue-konva'
 
 /* =========================================================
    🔥 DEV MODE: HARD KILL SW + CACHE (SAFE)
@@ -55,7 +55,7 @@ if (import.meta.env.PROD) {
    🚀 APP BOOTSTRAP
 ========================================================= */
 const app = createApp(App)
-
+app.use(VueKonva)
 app.use(router)
 
 app.use(Toast, {

@@ -1,14 +1,25 @@
 <template>
-  <canvas
-    ref="canvas"
-    :width="width"
-    :height="height"
-    class="mini-area-canvas"
-  />
+  <v-stage :config="stageConfig">
+    <v-layer>
+
+      <!-- Area fill -->
+      <v-line :config="areaConfig" />
+
+      <!-- Main line -->
+      <v-line :config="lineConfig" />
+
+      <!-- Last point -->
+      <v-circle
+        v-if="lastPoint"
+        :config="lastPointConfig"
+      />
+
+    </v-layer>
+  </v-stage>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { computed } from 'vue'
 
 const props = defineProps({
   data: { type: Array, required: true },
@@ -17,55 +28,77 @@ const props = defineProps({
   color: { type: String, default: '#3b82f6' }
 })
 
-const canvas = ref(null)
+const padding = {
+  top: 16,
+  bottom: 20,
+  left: 8,
+  right: 8
+}
 
-const draw = () => {
-  if (!canvas.value) return
-  const ctx = canvas.value.getContext('2d')
-  ctx.clearRect(0, 0, props.width, props.height)
+/* Stage */
+const stageConfig = computed(() => ({
+  width: props.width,
+  height: props.height
+}))
 
+/* Normalize points */
+const points = computed(() => {
   const max = Math.max(...props.data, 1)
-  const stepX = props.width / (props.data.length - 1)
+  const step =
+    (props.width - padding.left - padding.right) /
+    (props.data.length - 1)
 
-  // area
-  ctx.beginPath()
-  props.data.forEach((val, i) => {
-    const x = i * stepX
-    const y = props.height - (val / max) * (props.height - 20)
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-  })
+  return props.data.map((v, i) => ({
+    x: padding.left + i * step,
+    y:
+      padding.top +
+      (1 - v / max) *
+        (props.height - padding.top - padding.bottom)
+  }))
+})
 
-  ctx.lineTo(props.width, props.height)
-  ctx.lineTo(0, props.height)
-  ctx.closePath()
+const flatPoints = computed(() =>
+  points.value.flatMap(p => [p.x, p.y])
+)
 
-  const gradient = ctx.createLinearGradient(0, 0, 0, props.height)
-  gradient.addColorStop(0, props.color + '66')
-  gradient.addColorStop(1, props.color + '00')
+/* Area */
+const areaConfig = computed(() => ({
+  points: [
+    ...flatPoints.value,
+    props.width - padding.right,
+    props.height - padding.bottom,
+    padding.left,
+    props.height - padding.bottom
+  ],
+  closed: true,
+  tension: 0.35,
+  fillLinearGradientStartPoint: { x: 0, y: padding.top },
+  fillLinearGradientEndPoint: { x: 0, y: props.height },
+  fillLinearGradientColorStops: [
+    0, props.color + '33',
+    1, props.color + '00'
+  ]
+}))
 
-  ctx.fillStyle = gradient
-  ctx.fill()
+/* Line */
+const lineConfig = computed(() => ({
+  points: flatPoints.value,
+  stroke: props.color,
+  strokeWidth: 2,
+  tension: 0.35,
+  lineCap: 'round',
+  lineJoin: 'round'
+}))
 
-  // stroke
-  ctx.beginPath()
-  props.data.forEach((val, i) => {
-    const x = i * stepX
-    const y = props.height - (val / max) * (props.height - 20)
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
-  })
+/* Last point */
+const lastPoint = computed(() => points.value.at(-1))
 
-  ctx.lineWidth = 3
-  ctx.strokeStyle = props.color
-  ctx.stroke()
-}
-
-onMounted(draw)
-watch(() => props.data, draw, { deep: true })
+const lastPointConfig = computed(() => ({
+  x: lastPoint.value.x,
+  y: lastPoint.value.y,
+  radius: 3,
+  fill: '#ffffff',
+  stroke: props.color,
+  strokeWidth: 1.5
+}))
 </script>
-
-<style scoped>
-.mini-area-canvas {
-  width: 100%;
-  display: block;
-}
-</style>

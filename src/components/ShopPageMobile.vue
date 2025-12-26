@@ -410,19 +410,83 @@
 
 <script setup>
 import { useRouter } from 'vue-router';
-import { ref, reactive, computed, watch, shallowRef, markRaw, nextTick, onMounted, onUnmounted } from 'vue';
 import { supabase } from '../composables/useSupabase';
 import LikesAndComments from '../components/LikesAndComments.vue';
 import PostComments from '../components/PostComments.vue'
 import { usePostComments } from '../composables/usePostComments.js';
 import { fetchLikesCountForProducts } from '../composables/usePostLikesFirebaseCombined.js';
+import {
+  ref,
+  reactive,
+  computed,
+  watch,
+  shallowRef,
+  markRaw,
+} from 'vue';
 
+import {
+  useScroll,
+  useIntersectionObserver,
+  useScrollLock,
+  useDebounce,
+  useDebounceFn,
+  useTimeoutFn,
+} from '@vueuse/core';
+
+
+
+/* UI state */
+const uiVisible = ref(true);
+const searchOpen = ref(false);
+const searchQuery = ref('');
+const localMap = ref(new Map());
+
+/* product menu state */
+const menuOpen = ref(false);
+const menuProduct = ref(null);
+
+/* FILTER STATE — MUST BE HERE */
+const filterOpen = ref(false)
+
+/* share state */
+const shareModalOpen = ref(false);
+const shareProduct = ref(null);
+const shareProcessing = ref(false);
+
+/* searchResults is defined after filteredProducts to avoid circular refs */
+
+const scroller = ref(null);
+
+
+// Infinite-style incremental rendering: load posts in batches on scroll
+const batchSize = 8
+const displayedCount = ref(batchSize)
+
+// Body scroll lock when modals are open
+const bodyLock = useScrollLock(document.body)
+
+/* full-page loading flag */
+const loading = ref(true);
+
+watch(
+  () =>
+    searchOpen.value ||
+    menuOpen.value ||
+    filterOpen.value ||
+    shareModalOpen.value,
+  (locked) => {
+    bodyLock.value = locked
+  },
+  { immediate: true }
+)
+
+
+// Comments composable
 const activePost = ref(null)
 
 function openComments(post) {
   activePost.value = post
 }
-
 
 // NOTE: useCart intentionally NOT imported — mobile will emit and parent handles add-to-cart
 const props = defineProps({
@@ -461,39 +525,15 @@ function openProductFromProfile(p) {
 /* small in-component toast (mini toast used on mobile) */
 const toast = ref({ msg: '', type: 'info', timer: null });
 function showToast(msg, type = 'success', ms = 2200) {
-  if (toast.value.timer) clearTimeout(toast.value.timer);
-  toast.value.msg = msg;
-  toast.value.type = type;
-  toast.value.timer = setTimeout(() => { toast.value.msg = ''; toast.value.timer = null; }, ms);
+  toast.value.msg = msg
+  toast.value.type = type
+
+  const { start } = useTimeoutFn(() => {
+    toast.value.msg = ''
+  }, ms)
+
+  start()
 }
-
-/* UI state */
-const uiVisible = ref(true);
-const searchOpen = ref(false);
-const searchQuery = ref('');
-const localMap = ref(new Map());
-
-/* product menu state */
-const menuOpen = ref(false);
-const menuProduct = ref(null);
-
-/* share state */
-const shareModalOpen = ref(false);
-const shareProduct = ref(null);
-const shareProcessing = ref(false);
-
-/* full-page loading flag */
-const loading = ref(true);
-
-/* searchResults is defined after filteredProducts to avoid circular refs */
-
-const scroller = ref(null);
-
-
-// Infinite-style incremental rendering: load posts in batches on scroll
-const batchSize = 8
-const displayedCount = ref(batchSize)
-
 
 /* ----------------------
    Auth helper (resilient) + caching
@@ -680,12 +720,11 @@ async function addCartWithAuth(p) {
 const openProductMenu = (p) => {
   menuProduct.value = p || null;
   menuOpen.value = true;
-  document.body.style.overflow = 'hidden';
 };
 const closeProductMenu = () => {
   menuOpen.value = false;
   menuProduct.value = null;
-  document.body.style.overflow = '';
+
 };
 
 /* avatar helper */
@@ -720,77 +759,18 @@ function hashCode(str) {
 const onImageLoad = (id) => { try { if (!id) return; localMap.value.set(id, true); } catch (e) {} };
 const onImageError = (p) => { try { if (p) { localMap.value.set(p.id, true); p._imgError = true; } } catch (e) {} };
 
-/* -----------------------------
-   Lazy image loader (IntersectionObserver)
------------------------------- */
-let io = null
-function setupImageObserver() {
-  if (io || typeof window === 'undefined') return
-  if (!('IntersectionObserver' in window)) return
-
-  io = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (!entry.isIntersecting) return
-      const img = entry.target
-      const src = img.getAttribute('data-src')
-      const id = img.getAttribute('data-id')
-      if (src) {
-        img.src = src
-        img.addEventListener('load', () => {
-          onImageLoad(id)
-        }, { once: true })
-      } else {
-        // if no src, still mark loaded so loader hides
-        onImageLoad(id)
-      }
-      io.unobserve(img)
-    })
-  }, { root: null, rootMargin: '300px' })
-
-  // observe current images
-  nextTick(() => {
-    const imgs = (scroller.value || document).querySelectorAll('.post-img[data-src]')
-    imgs.forEach(i => {
-      // if image is already near viewport, load immediately
-      try {
-        const rect = i.getBoundingClientRect()
-        if (rect.top < (window.innerHeight + 300)) {
-          const src = i.getAttribute('data-src')
-          const id = i.getAttribute('data-id')
-          if (src) {
-            i.src = src
-            i.addEventListener('load', () => onImageLoad(id), { once: true })
-          } else {
-            onImageLoad(id)
-          }
-        } else {
-          io.observe(i)
-        }
-      } catch (e) {
-        try { io.observe(i) } catch (e) {}
-      }
-    })
-  })
-}
-
-onMounted(() => setupImageObserver())
-onUnmounted(() => { if (io) { io.disconnect(); io = null } })
-
 /* helpers */
 const goBack = () => router.back();
 const toggleSearch = () => {
   searchOpen.value = !searchOpen.value
-  document.body.style.overflow = searchOpen.value ? 'hidden' : ''
 }
 
 const closeSearch = () => {
   searchOpen.value = false
-  document.body.style.overflow = ''
 }
 
 const openMenu = async () => {
   filterOpen.value = true;
-  document.body.style.overflow = 'hidden';
 
   if (categories.value.length === 0) {
     await fetchCategories();
@@ -799,7 +779,6 @@ const openMenu = async () => {
 
 const closeFilter = () => {
   filterOpen.value = false;
-  document.body.style.overflow = '';
 };
 
 
@@ -866,7 +845,6 @@ function onPostComment({ productId }) {
 
 
 /* FILTER STATE */
-const filterOpen = ref(false);
 
 const filters = reactive({
   category: null,        // null = all
@@ -878,17 +856,7 @@ const filters = reactive({
 watch(
   () => [filters.category, filters.sort, filters.shuffle],
   () => {
-    displayedCount.value = Math.max(
-  displayedCount.value,
-  batchSize
-)
-    lastLoadTime = 0
-    // Re-observe sentinel if it was unobserved
-    if (loadMoreSentinel.value && loadMoreIO && displayedCount.value < filteredProducts.value.length) {
-      try {
-        loadMoreIO.observe(loadMoreSentinel.value)
-      } catch (e) {}
-    }
+    displayedCount.value = Math.max(batchSize, displayedCount.value)
   }
 )
 
@@ -965,17 +933,20 @@ const visibleProducts = computed(() => {
 
 
 /* search results */
+const debouncedQuery = useDebounce(searchQuery, 200)
+
 const searchResults = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase();
-  if (!q) return [];
+  const q = debouncedQuery.value.trim().toLowerCase()
+  if (!q) return []
 
   return productsToShow.value
     .filter(p => {
-      const hay = ((p.title || '') + ' ' + (p.caption || '') + ' ' + (p.category || p.productCategory || '')).toLowerCase();
-      return hay.includes(q);
+      const hay =
+        `${p.title || ''} ${p.caption || ''} ${p.category || ''}`.toLowerCase()
+      return hay.includes(q)
     })
-    .slice(0, 25);
-});
+    .slice(0, 25)
+})
 
 function addCartFromMenu() {
   const p = menuProduct?.value ?? menuProduct;
@@ -986,108 +957,36 @@ function addCartFromMenu() {
 
 
 const loadMoreSentinel = ref(null)
-let loadMoreIO = null
-let lastLoadTime = 0
 
-onMounted(() => {
-loadMoreIO = new IntersectionObserver(
-  (entries) => {
-    if (!entries[0].isIntersecting) return
-
-    if (displayedCount.value < filteredProducts.value.length) {
+useIntersectionObserver(
+  loadMoreSentinel,
+  ([{ isIntersecting }]) => {
+    if (
+      isIntersecting &&
+      displayedCount.value < filteredProducts.value.length
+    ) {
       displayedCount.value += batchSize
     }
   },
   {
-    root: null,
     rootMargin: '1000px',
-    threshold: 0
   }
 )
 
-  if (loadMoreSentinel.value) {
-    loadMoreIO.observe(loadMoreSentinel.value)
-  }
-})
+// Scroll hide/show topbar
+const { y } = useScroll(window)
 
-onUnmounted(() => {
-  if (loadMoreIO) {
-    loadMoreIO.disconnect()
-    loadMoreIO = null
-  }
-})
-
-// Scroll handler to show/hide UI on scroll
-let lastScrollY = 0
-let ticking = false
-let snapTimeout = null
-
-function handleScroll() {
+watch(y, (current, prev) => {
   if (
-  searchOpen.value ||
-  menuOpen.value ||
-  filterOpen.value ||
-  shareModalOpen.value
-) {
-  return
-}
-  if (ticking) return
+    searchOpen.value ||
+    menuOpen.value ||
+    filterOpen.value ||
+    shareModalOpen.value
+  ) return
 
-  ticking = true
-  requestAnimationFrame(() => {
-    const currentY = window.scrollY
-
-    /* TOPBAR HIDE / SHOW */
-    if (currentY > lastScrollY + 8) {
-      uiVisible.value = false
-    } else if (currentY < lastScrollY - 8) {
-      uiVisible.value = true
-    }
-
-    lastScrollY = currentY
-    ticking = false
-  })
-
-  /* SNAP (debounced) */
-  clearTimeout(snapTimeout)
-  snapTimeout = setTimeout(snapToCard, 140)
-}
-
-onMounted(() => {
-  window.addEventListener('scroll', handleScroll, { passive: true })
+  if (current > prev + 8) uiVisible.value = false
+  else if (current < prev - 8) uiVisible.value = true
 })
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll)
-})
-
-//heatmap scroll snapping
-let lastSnapY = 0
-
-function snapToCard() {
-  const delta = Math.abs(window.scrollY - lastSnapY)
-  if (delta > 80) return   // user still scrolling
-
-  lastSnapY = window.scrollY
-
-  if (!scroller.value) return
-  const cards = scroller.value.querySelectorAll('.post-card')
-
-  let closest = null
-  let min = Infinity
-
-  cards.forEach(card => {
-    const rect = card.getBoundingClientRect()
-    const dist = Math.abs(rect.top - 64)
-    if (dist < min) {
-      min = dist
-      closest = card
-    }
-  })
-
-  closest?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-}
-
 
 </script>
 

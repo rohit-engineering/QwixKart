@@ -71,6 +71,7 @@
                 :src="avatarUrl"
                 alt="Profile avatar"
                 class="avatar"
+                 loading="lazy"
                 @error="onAvatarError"
               />
               <span class="status-dot"></span>
@@ -162,9 +163,8 @@ const generateUniqueUsername = async (base, gender) => {
 
     const { data, error } = await supabase
       .from('profiles')
-      .select('id')
-      .eq('username', candidate)
-      .limit(1)
+      .select('username')
+      .ilike('username', `${candidate}`) // check exact candidate
 
     if (error) {
       console.warn('Username check failed:', error.message)
@@ -172,10 +172,12 @@ const generateUniqueUsername = async (base, gender) => {
     }
 
     if (!data || data.length === 0) {
+      // ✅ candidate is free
       return candidate
     }
   }
 
+  // fallback
   return `${base}_${Math.floor(Math.random() * 9999)}`
 }
 
@@ -338,9 +340,7 @@ export default {
     })
 
     // 🔄 skeleton loading flag
-    const isLoading = computed(() => {
-      return user.value && (!profile.value || !visualsInitialized.value)
-    })
+    const isLoading = computed(() => !profile.value)
 
     // Load existing username if present
     const loadExistingUsername = () => {
@@ -350,13 +350,20 @@ export default {
     }
 
     const initProfileVisuals = async () => {
-  try {
-    if (!user.value || !profile.value || visualsInitialized.value) return
+  if (!user.value || !profile.value || visualsInitialized.value) return
 
-    loadExistingUsername()
+  // 1️⃣ Render something immediately
+  loadExistingUsername()
 
+  avatarUrl.value =
+    profile.value.avatar_url ||
+    buildInitialsFallback(profile.value.full_name)
+
+  visualsInitialized.value = true // 🚀 UNBLOCK UI HERE
+
+  // 2️⃣ Background enhancements
+  queueMicrotask(async () => {
     let updatedUsername = username.value
-    let updatedAvatar = ''
 
     if (!updatedUsername) {
       const base = normalizeBase(profile.value.full_name, user.value.email)
@@ -364,39 +371,30 @@ export default {
       username.value = updatedUsername
     }
 
-    const style = pickStyleForUser(
-      gender.value,
-      updatedUsername || user.value.id
-    )
+    const style = pickStyleForUser(gender.value, updatedUsername)
+    const finalAvatar = buildDiceBearAvatarUrl(style, updatedUsername, gender.value)
 
-    const seed = avatarSeed.value
-    updatedAvatar = buildDiceBearAvatarUrl(style, seed, gender.value)
-    avatarUrl.value = updatedAvatar
+    avatarUrl.value = ''
+requestAnimationFrame(() => {
+  avatarUrl.value = finalAvatar
+})
 
-    await supabase
-      .from('profiles')
-      .update({
-        username: updatedUsername,
-        avatar_url: updatedAvatar
-      })
-      .eq('id', user.value.id)
-
-    visualsInitialized.value = true
-  } catch (err) {
-    console.error('Profile visuals failed:', err)
-    visualsInitialized.value = true // 🚨 allow UI to render anyway
-  }
+    if (
+  updatedUsername !== profile.value.username ||
+  finalAvatar !== profile.value.avatar_url
+) {
+  await supabase.from('profiles').update({
+    username: updatedUsername,
+    avatar_url: finalAvatar
+  }).eq('id', user.value.id)
 }
+  })
+}
+
 
     onMounted(() => {
       if (!user.value) return
       initProfileVisuals()
-
-      if (logoutBtn.value) {
-    logoutBtn.value.addEventListener('click', () => {
-      console.log('clicked')
-    })
-  }
     })
 
     watch(profile, () => {
@@ -620,6 +618,7 @@ export default {
   border-radius: 50%;
   background-color: #e5e7eb;
   object-fit: cover;
+   transition: opacity 0.25s ease;
 }
 
 /* online dot */

@@ -19,26 +19,26 @@
 
     <!-- Glassmorphism activity card with smooth line chart -->
     <div class="activity-big-card">
-      <div class="activity-left">
-        <p class="activity-main-label">Engagement snapshot</p>
-        <p class="activity-days">
-          {{ exploredCount }} items explored
-        </p>
-        <p class="activity-secondary">
-          {{ visitCount }} visits • {{ dashboard.totalOrders }} orders
-        </p>
-      </div>
+  <div class="activity-left">
+    <p class="activity-main-label">Engagement snapshot</p>
+    <p class="activity-days">
+      {{ exploredCount }} items explored
+    </p>
+    <p class="activity-secondary">
+      {{ visitCount }} visits • {{ dashboard.totalOrders }} orders
+    </p>
+  </div>
 
-      <div class="activity-chart-mini">
-        <MiniLineCanvas
-    :data="[
-      visitCount,
-      exploredCount,
-      dashboard.totalOrders
-    ]"
-  />
-      </div>
-    </div>
+  <div class="activity-chart-wrap">
+    <MiniLineCanvas
+      :data="[
+        visitCount,
+        exploredCount,
+        dashboard.totalOrders
+      ]"
+    />
+  </div>
+</div>
 
     <!-- metric cards -->
     <div class="dash-metrics">
@@ -504,55 +504,77 @@ onBeforeUnmount(() => {
 }
 
 /* glassmorphism activity card */
+/* Improved activity card */
 .activity-big-card {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.9rem;
-  padding: 0.95rem 1rem;
+  gap: 1rem;
+
+  padding: 1rem 1.1rem;
   border-radius: 22px;
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.8), rgba(254, 243, 199, 0.7));
+
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.92),
+    rgba(254, 243, 199, 0.6)
+  );
+
   box-shadow:
-    0 18px 35px rgba(15, 23, 42, 0.18),
-    0 0 0 1px rgba(148, 163, 184, 0.18);
-  backdrop-filter: blur(18px);
-  -webkit-backdrop-filter: blur(18px);
+    0 14px 30px rgba(15, 23, 42, 0.14),
+    0 0 0 1px rgba(251, 191, 36, 0.22);
+
+  backdrop-filter: blur(14px);
 }
 
+/* Text column */
 .activity-left {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.15rem;
+  max-width: 55%;
 }
 
 .activity-main-label {
-  font-size: 0.86rem;
-  font-weight: 600;
-  color: #0f172a;
-  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9ca3af;
 }
 
 .activity-days {
-  margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.05rem;
   font-weight: 700;
   color: #111827;
 }
 
 .activity-secondary {
-  margin: 0;
-  font-size: 0.8rem;
-  color: #4b5563;
+  font-size: 0.78rem;
+  color: #6b7280;
 }
 
-.activity-chart-mini {
-  flex: 0 0 auto;
+/* 🔥 Chart container (THIS fixes visibility) */
+.activity-chart-wrap {
+  flex-shrink: 0;
+
+  padding: 0.45rem 0.55rem;
+  border-radius: 14px;
+
+  background: linear-gradient(
+    180deg,
+    #ffffff,
+    #f8fafc
+  );
+
+  box-shadow:
+    inset 0 0 0 1px rgba(226, 232, 240, 0.9),
+    0 4px 10px rgba(15, 23, 42, 0.12);
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.activity-chart-mini :deep(.apexcharts-canvas) {
-  width: 180px !important;
-}
 
 /* metric cards (numbers + small bars) */
 .dash-metrics {
